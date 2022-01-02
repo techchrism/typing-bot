@@ -55,6 +55,15 @@ const backMessages = [
     'Back at it again!',
     'Hopefully worth the wait'
 ];
+const dodgeMessages = [
+    'You think you can run away from me?',
+    'Did you actually expect that to work?',
+    'I still see you',
+    'There\'s nothing you can do to stop me'
+];
+const hmmEmoji = [
+    '🤔', '👀', '👁', '🤡', '🤫', '🧐'
+];
 
 function getRandomMessage(batch) {
     return batch[Math.floor(Math.random() * batch.length)];
@@ -135,6 +144,8 @@ client.once('ready', () => {
     });
 
     client.on('messageCreate', async message => {
+        if(message.author.bot) return;
+
         const id = message.author.id + '-' + message.channel.id;
         if(people.hasOwnProperty(id)) {
             const person = people[id];
@@ -149,6 +160,37 @@ client.once('ready', () => {
 
             person.message.delete();
             delete people[id];
+        } else if(activeServers.includes(message.guild.id)) {
+            logger.info(message.author.toString() + ' in ' + message.channel.id + ' dodged with length ' + message.content.length);
+
+            const reaction = getRandomMessage(hmmEmoji);
+            await message.react(reaction);
+            setTimeout(async () => {
+                try {
+                    await message.reactions.resolve(reaction).users.remove(client.user);
+                } catch(e) {
+                    logger.error('Error removing reaction:');
+                    logger.error(e);
+                }
+            }, 15 * 1000);
+
+            if(message.content.length > 15) {
+                try {
+                    const dm = await message.author.createDM();
+                    const sentDM = await dm.send(getRandomMessage(dodgeMessages));
+                    setTimeout(async () => {
+                        try {
+                            await sentDM.delete();
+                        } catch(e) {
+                            logger.error('Error removing sent dm:');
+                            logger.error(e);
+                        }
+                    }, 25 * 1000);
+                } catch(e) {
+                    logger.error('Error sending dm:');
+                    logger.error(e);
+                }
+            }
         }
 
         if(message.mentions.has(client.user) && message.member.permissionsIn(message.channel).has('ADMINISTRATOR')) {
@@ -156,16 +198,14 @@ client.once('ready', () => {
             if(message.content.includes('go') && !activeServers.includes(message.guild.id)) {
                 logger.info('Starting in ' + message.guild.id);
                 activeServers.push(message.guild.id);
+                await fs.writeFile('./active.json', JSON.stringify(activeServers, null, 4), 'utf-8');
                 await message.react('📈');
             } else if(message.content.includes('stop') && activeServers.includes(message.guild.id)) {
                 logger.info('Stopping in ' + message.guild.id);
                 activeServers = activeServers.filter(gid => gid !== message.guild.id);
+                await fs.writeFile('./active.json', JSON.stringify(activeServers, null, 4), 'utf-8');
                 await message.react('📉');
-            } else {
-                return;
             }
-
-            await fs.writeFile('./active.json', JSON.stringify(activeServers, null, 4), 'utf-8');
         }
     });
 });
